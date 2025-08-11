@@ -206,3 +206,5 @@ __marimo__/
 keys.json
 messages.json
 users.json
+config.json
+*.pem

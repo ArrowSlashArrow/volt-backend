@@ -53,11 +53,11 @@ def save_messages():
 def stringify_json(d):
     return json.dumps(d)
     
-def last_1000_msgs(channels):
+def last_n_msgs(channels, n):
     last = {"channels": channels, "msgs": {}}
     for channel in channels:
         channel_msgs = messages["msgs"].get(channel, [])
-        last["msgs"][channel] = channel_msgs if len(channel_msgs) <= 1000 else channel_msgs[-1000:]
+        last["msgs"][channel] = channel_msgs if len(channel_msgs) <= n else channel_msgs[-n:]
     return last
 
 def connect_msg(user):
@@ -206,7 +206,7 @@ async def main(ws):
                         continue
                     
                     user = msg["username"]
-                    password = hashlib.sha256(bytes(msg["password"]))
+                    password = hashlib.sha256(bytes(msg["password"])).hexdigest().encode()
                     
                     if get_user_info(user) != {}:
                         await send_json({"success": False, "reason": "Already logged in", "what": "login"})
@@ -218,6 +218,7 @@ async def main(ws):
                     
                     if user in users:
                         if users[user][0] != password:
+                            print(users[user][0], password)
                             print("bad password")
                             
                             await send_json({"success": False, "reason": "Incorrect password", "what": "login"})
@@ -252,7 +253,7 @@ async def main(ws):
                     
                     channels = get_whitelisted_channels(config, username)
                     print(f"sending messages to {ip} from these channels: {channels}")
-                    data = last_1000_msgs(channels)
+                    data = last_n_msgs(channels, 1000)
                     data["users"] = [user["user"] for _, user in connected_users.items()]
                     data["what"] = "data"
                     await send_json(data)
@@ -378,7 +379,7 @@ async def _main():
     except:
         pass
 
-    async with websockets.serve(main, "127.0.0.1", 2096, ssl=ssl_context):
+    async with websockets.serve(main, "0.0.0.0", 2096, ssl=ssl_context):
         print("server started")
         try:
             await asyncio.Future()

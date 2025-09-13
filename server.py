@@ -62,6 +62,15 @@ def disconnect_msg(user):
 
 
 async def main(ws):
+    ip = ws.remote_address[0]
+    user_struct = {
+        "websocket": ws,
+        "key": "",
+        "ip": ip,
+        "loggedin": False,
+        "admin": False
+    }
+    
     async def send_json(data):
         await ws.send(json.dumps(data))
         
@@ -70,13 +79,13 @@ async def main(ws):
             print("bad session")
             await send_json({"success": False, "reason": "Bad session", "what": what})
             return True
-        if check_logged_in and not loggedin:
+        if check_logged_in and not user_struct["loggedin"]:
             await send_json({"success": False, "reason": "Not logged in", "what": what})
             return True
         return False
 
     async def check_session_admin(msg, what):
-        if msg["session"] != session or session == "" or not admin:
+        if msg["session"] != session or session == "" or not user_struct["admin"]:
             print("bad session")
             await send_json({"success": False, "reason": "Bad session", "what": what})
             return True
@@ -84,37 +93,26 @@ async def main(ws):
     
     async def broadcast_msg(msg):
         removelist = []    
-        for ip, connection in connected_users.items():
+        for user, connection in connected_users.items():
             try:
                 await connection["websocket"].send(json.dumps(msg))
             except Exception as e:
                 print(f"bad happened: {e}")
                 removelist.append(ip)
                 
-        for ip in removelist:
-            connected_users.pop(ip, None)
+        for user in removelist:
+            connected_users.pop(user, None)
             
     def get_user_info(user):
-        user_info = {}
-        print(user, connected_users)
-        for ip, connected_user in connected_users.items():
-            if connected_user["user"] == user:
-                user_info = connected_user
-                user_info["ip"] = ip
-        return user_info
+        return connected_users.get(user, {})
             
     async def kick(user):
         user_info = get_user_info(user)
-        if user_info == {}:
-            await send_json({"success": False, "reason": "This user is not connected", "what": "kickattempt"})
-            return
-        
-        print(user_info)
         await user_info["websocket"].close(code=1000, reason=b"bye bye")
             
         channel = messages["channels"][0]
         ip = user_info["ip"]
-        dc_msg = disconnect_msg(user_info["user"])
+        dc_msg = disconnect_msg(user)
         
         print(f"{ip} was kicked")
         connected_users.pop(ip, None)
@@ -143,7 +141,7 @@ async def main(ws):
         save_messages()
         return True
 
-    ip = ws.remote_address[0]
+    
     
     if ip in config["banned_ips"]:
         await send_json({"success": False, "reason": "We tolerate you no more.", "what": "connect"})
@@ -154,16 +152,10 @@ async def main(ws):
         return
     
     await send_json({"success": True, "what": "connect"})
-    connected_users[ip] = {
-        "websocket": ws,
-        "key": "",
-        "user": ""
-    }
+    
     
     print(f"{ip} connected")
     session = ""
-    loggedin = False
-    admin = False
     username = ""
     
     try:
@@ -190,6 +182,8 @@ async def main(ws):
                             "what": "session",
                             "reason": "Client did not provide public key."
                         })
+                        
+                    user_struct["session"] = session
                     
                 case "login":
                     if await check_session(msg, "login", False):
@@ -202,7 +196,7 @@ async def main(ws):
                     user = msg["username"]
                     password = hashlib.sha256(bytes(msg["password"])).hexdigest().encode()
                     
-                    if get_user_info(user) != {}:
+                    if user in connected_users:
                         await send_json({"success": False, "reason": "Already logged in", "what": "login"})
                         continue
                     
@@ -216,9 +210,11 @@ async def main(ws):
                             
                             await send_json({"success": False, "reason": "Incorrect password", "what": "login"})
                             continue
+                        else:
+                            print("balright password")
                     else:
                         print("new account")
-                        users[user] = [password, len(users)]
+                        users[user] = {"pwd": password, "id": len(users)}
                         save_users()
                         
                     print("good")
@@ -233,12 +229,14 @@ async def main(ws):
                     })
                     messages["msgs"][messages["channels"][0]].append(stringify_json(connected_msg))
                     
-                    loggedin = True
-                    connected_users[ip]["user"] = user
+                    
+                    user_struct["loggedin"] = True
+                    connected_users[user] = user_struct
+                    
                     username = user
                     
-                    if user in config["admins"]:
-                        admin = True
+                    if username in config["admins"]:
+                        user_struct["admin"] = True
                         
                 case "data":
                     if await check_session(msg, "data"):
@@ -247,7 +245,7 @@ async def main(ws):
                     channels = get_whitelisted_channels(config, username)
                     print(f"sending messages to {ip} from these channels: {channels}")
                     data = last_n_msgs(channels, 1000)
-                    data["users"] = [user["user"] for _, user in connected_users.items()]
+                    data["users"] = [user for user in connected_users.keys()]
                     data["what"] = "data"
                     await send_json(data)
                     print("sent")
@@ -335,10 +333,10 @@ async def main(ws):
     
     finally:
         channel = ws.close_reason
-        dc_msg = disconnect_msg(connected_users[ip]["user"])
+        dc_msg = disconnect_msg(username)
         
-        print(f"{ip} disconnected")
-        connected_users.pop(ip, None)
+        print(f"{username} disconnected")
+        connected_users.pop(username, None)
         
         if channel != "":
             messages["msgs"][channel or messages["channels"][0]].append(stringify_json(dc_msg))

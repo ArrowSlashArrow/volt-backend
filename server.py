@@ -1,5 +1,7 @@
 import asyncio, json, websockets, random, requests, base64, os, time, ssl, sys, hashlib
 
+BINDIP = "0.0.0.0"
+PORT = "2096"
 
 def read_or_create(path, fallback={}):
     data = fallback
@@ -354,7 +356,7 @@ async def _main():
     except:
         pass
 
-    async with websockets.serve(main, "0.0.0.0", 2096):
+    async with websockets.serve(main, BINDIP, PORT):
         print("server started")
         try:
             await asyncio.Future()

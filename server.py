@@ -1,7 +1,7 @@
 import asyncio, json, websockets, random, requests, base64, os, time, ssl, sys, hashlib
 
 BINDIP = "0.0.0.0"
-PORT = "2096"
+PORT = 2096
 
 def read_or_create(path, fallback={}):
     data = fallback

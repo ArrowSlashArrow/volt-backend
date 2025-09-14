@@ -20,7 +20,20 @@ config_file = "config.json"
 users = read_or_create(users_file)
 messages = read_or_create(messages_file, default_msgs)
 
-config = read_or_create(config_file)
+config_boilerplate = {
+    "channels": {
+        "general": {
+            "whitelist": [],
+            "whitelist_enabled": False,
+            "blacklist": [],
+            "blacklist_enabled": True,
+        }
+    }, 
+    "banned_ips": [],
+    "banned_users": [],
+    "admins": []
+}
+config = read_or_create(config_file, config_boilerplate)
 
 connected_users = {}
 
